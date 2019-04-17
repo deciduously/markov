@@ -1,3 +1,4 @@
+use regex::Regex;
 use std::{
     fs::OpenOptions,
     io::{BufReader, Read},
@@ -12,7 +13,8 @@ fn read_file() -> Result<String, Box<std::error::Error>> {
 }
 
 fn split_words<'a>(s: &'a str) -> Vec<&'a str> {
-    s.split_whitespace().collect::<Vec<&str>>()
+    let spaces_re = Regex::new(r" +").unwrap();
+    spaces_re.split(s).collect::<Vec<&str>>()
 }
 
 fn main() {
