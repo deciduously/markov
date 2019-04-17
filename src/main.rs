@@ -3,17 +3,20 @@ use std::{
     io::{BufReader, Read},
 };
 
-// step one - read in and separate into words
-fn read_words() -> Result<Vec<String>, Box<std::error::Error>> {
+fn read_file() -> Result<String, Box<std::error::Error>> {
     let file = OpenOptions::new().read(true).open("poetry.txt")?;
     let mut contents = String::new();
     let mut bfr = BufReader::new(file);
     bfr.read_to_string(&mut contents)?;
-    let ret: Vec<&str> = contents.split_whitespace().collect();
-    let owned_ret: Vec<String> = ret.iter().map(|s| s.to_string()).collect();
-    Ok(owned_ret)
+    Ok(contents)
+}
+
+fn split_words<'a>(s: &'a str) -> Vec<&'a str> {
+    s.split_whitespace().collect::<Vec<&str>>()
 }
 
 fn main() {
-    println!("{:?}", read_words());
+    let file_str = read_file().unwrap();
+    let words = split_words(&file_str);
+    println!("{:?}", words);
 }
