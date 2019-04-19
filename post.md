@@ -2,9 +2,9 @@
 
 ## AKA 65 Line Markov Chain (A Rewrite)
 
-I've found that if you can translate something into Rust, you pretty much understand it.  In that spirit, this post covers a translation of the program in [this post](http://theorangeduck.com/page/17-line-markov-chain) by [orangeduck](http://theorangeduck.com/page/about) in Rust, with a little extra explanation.  You should be able to knock one out in whatever you like after!
+I've found that if you can translate something into Rust, you pretty much understand it.  In that spirit, this post covers a translation of the program in [this post](http://theorangeduck.com/page/17-line-markov-chain) by [orangeduck](http://theorangeduck.com/page/about) in Rust, with a little extra explanation.  In fact, it will probably move a little slow - depending on your comfort level, it may be skimmable!  You should be able to knock one out in whatever language you like after.
 
-A [Markov chain](https://en.wikipedia.org/wiki/Markov_chain) can be used to generate realistic(ish) sounding random text based on a sample input.  The Wikipedia article is somewhat opaque, as Wikipedia can tends to be, but at it's heart it's a very simple concept in which the next word is chosen based entirely on the current two words.  It's surprisingly simple (at least, I was surprised at how easy it was) and yet generates some real-sounding(ish) text with minimal effort.
+A [Markov chain](https://en.wikipedia.org/wiki/Markov_chain) can be used to generate realistic(ish) sounding random text based on a sample input.  The Wikipedia article is somewhat opaque, as Wikipedia can tends to be, but at it's heart it's a very simple concept in which the next word is chosen based entirely on the current two words.  It's surprisingly simple (at least, I was surprised at how easy it was) and yet generates some real-sounding(ish) text with minimal effort.  For a fun example of this in action, check out the subreddit [/r/SubredditSimulator](https://www.reddit.com/r/SubredditSimulator/).  All of the posts and comments found there are generated using markov chains using their respective subreddits as input data.
 
 You shouldn't need to know Rust to follow along.
 
@@ -66,7 +66,7 @@ fn main() {
 
 If you're not new to Rust, that's probably fine and dandy.  If you are, let's unpack it a little.
 
-First, we generate the struct itself from whatever was passed on the command line.  For the example from above, we now have:
+First, we generate the struct itself from whatever was passed on the command line.  In the line `let opt = Opt::from_ars()`, `Opt` is the struct we defined just above.  We can call the `from_args()` method on it because we derived the `StructOpt` *trait* for this struct with `#[structopt(name = "markov")]`.  For the `./markov -i poetry.txt -l 500` example from above, we now have stored in the valriable `opt`:
 
 ```rust
 Opt(
@@ -75,13 +75,15 @@ Opt(
 )
 ```
 
-All in-memory data structures will be presented in [RON](https://github.com/ron-rs/ron).  Note that the guts of `PathBuf` are omitted - it's an [`OsString`](https://doc.rust-lang.org/std/ffi/struct.OsString.html) if you're curious but we just care it's a `PathBuf`.
+All in-memory data structures will be presented in [RON](https://github.com/ron-rs/ron).
 
-The first thing to do is get something more concrete from those options to pass in to the program.  Using `unwrap_or()` is a great way to do this.  If the value is a `Some(thing)` it returns `thing`, and if it's `None` it returns the passed argument.
+Note that the guts of `PathBuf` are omitted - it's an [`OsString`](https://doc.rust-lang.org/std/ffi/struct.OsString.html) if you're curious but we just care it's a `PathBuf`.
 
-That `from_str` call we do to get our default `"poetry.txt"` `&str` value into a `PathBuf` is part of the `FromStr` and only works when that [trait](https://doc.rust-lang.org/book/ch10-02-traits.html) is in scope.  It's an operation that can fail - for example, with a malformed path - so it returns a `Result<T, E>`.  You can get at the `T` of those with `unwrap()` if you're sure you'll have one.  We know this one won't fail because we just made the input ourselves and it's not a malformed path, just a filename with an extension.  If you don't have something valid this will panic and crash.  It's almost always better to use something like `unwrap_or()`  or [pattern matching](https://doc.rust-lang.org/book/ch06-02-match.html) to deal with the alternative cleanly!
+The first thing to do is get something more concrete from those options to pass in to the program.  Using `unwrap_or()` is a great way to do this.  If the value is a `Some(thing)` it returns `thing`, and if it's `None` it returns the passed argument, and it's gotta be one of those two.
 
-Next we pass both in to an error-checked function.  It's good practice to take advantage of Rust's error handling for as much of your program as possible - this is a good way to force it!
+That `from_str` call we do to get our default `"poetry.txt"` `&str` value into a `PathBuf` is part of the `FromStr` and only works when that [trait](https://doc.rust-lang.org/book/ch10-02-traits.html) is in scope.  It's an operation that can fail - for example, with a malformed path - so it returns a `Result<T, E>`.  This type acts like `Either` from Haskell, it either contains an `Ok(something: T)` or an `Err(error: E)` value.  You can get at the `T` of those with `unwrap()` if you're sure you'll have an `Ok`.  We know this one won't fail because we just made the input ourselves and it's not a malformed path, just a filename with an extension.  If you don't have something valid this will panic and crash.  It's almost always better to use something like `unwrap_or()`  or [pattern matching](https://doc.rust-lang.org/book/ch06-02-match.html) to deal with the alternative cleanly!
+
+Next we pass both in to an error-checked function.  It's good practice to take advantage of Rust's error handling for as much of your program as possible - this is a good way to force it!  The `if let` syntax is a way of capturing any error.  Our `run()` function here is going to return a `Result<T, E>` - when called like this, if it ends up returning an `Ok(_)` nothing will happen, but if anything inside returns an error at any point, we'll execute the code path in this if block.  It will use `eprintln!` to display the error information on `stderr` and end the program with an error code of 1, indicating it was not successful.
 
 Of course, we need a `run()` function.  Here's a stub, just to get us to compile:
 
