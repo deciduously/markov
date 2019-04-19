@@ -66,7 +66,7 @@ fn main() {
 
 If you're not new to Rust, that's probably fine and dandy.  If you are, let's unpack it a little.
 
-First, we generate the struct itself from whatever was passed on the command line.  In the line `let opt = Opt::from_ars()`, `Opt` is the struct we defined just above.  We can call the `from_args()` method on it because we derived the `StructOpt` *trait* for this struct with `#[structopt(name = "markov")]`.  For the `./markov -i poetry.txt -l 500` example from above, we now have stored in the variable `opt`:
+First, we generate the struct itself from whatever was passed on the command line.  In the line `let opt = Opt::from_ars()`, `Opt` is the struct we defined just above.  We can call the `from_args()` method on it because we derived the `StructOpt` *trait* for this struct with the `#[derive(StructOpt, Debug)]` line.  For the `./markov -i poetry.txt -l 500` example from above, we now have stored in the variable `opt`:
 
 ```rust
 Opt(
