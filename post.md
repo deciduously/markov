@@ -10,6 +10,8 @@ You shouldn't need to know Rust to follow along.
 
 ### On Your Marks
 
+If you're just here for the Markov Chain algorithm and not the Rust, skip down to the **Markov** section.
+
 This project requires stable [Rust](https://rustup.rs/).  Go there to get it if you need, and then spin up a project:
 
 ```
@@ -19,7 +21,7 @@ $ cd markov/
 
 ### Get Set
 
-before hopping in, a quick 'n' dirty CLI would be nice for playing around with different inputs.  Luckily, Rust has a great option in [structopt](https://github.com/TeXitoi/structopt).  From the project root:
+Before hopping in, a quick 'n' dirty CLI would be nice for playing around with different inputs.  Luckily, Rust has a great option in [structopt](https://github.com/TeXitoi/structopt).  From the project root:
 
 ```
 $ cargo add structopt
@@ -64,20 +66,20 @@ fn main() {
 
 If you're not new to Rust, that's probably fine and dandy.  If you are, let's unpack it a little.
 
-First, we generate the struct itself from whatever was passed on the command line.  For the example above, we now have:
+First, we generate the struct itself from whatever was passed on the command line.  For the example from above, we now have:
 
-```ron
+```rust
 Opt(
-    input: Some("poetry.txt"),
+    input: Some(PathBuf(inner: "poetry.txt")),
     length: Some(350u32),
 )
 ```
 
-All in-memory data structures will be presented in [RON](https://github.com/ron-rs/ron).
+All in-memory data structures will be presented in [RON](https://github.com/ron-rs/ron).  Note that the guts of `PathBuf` are omitted - it's an [`OsString`](https://doc.rust-lang.org/std/ffi/struct.OsString.html) if you're curious but we just care it's a `PathBuf`.
 
 The first thing to do is get something more concrete from those options to pass in to the program.  Using `unwrap_or()` is a great way to do this.  If the value is a `Some(thing)` it returns `thing`, and if it's `None` it returns the passed argument.
 
-That `from_str` call we do to get our default `"poetry.txt"` value into a `PathBuf` is part of the `FromStr` and only works when that [trait](https://doc.rust-lang.org/book/ch10-02-traits.html) is in scope.  It's an operation that can fail (but won't here), so it returns a `Result<T, E>`.  You can get at the `T` of those with `unwrap()` if you're sure you'll have one.  If you don't this will panic and crash.  It's always better to use something like `unwrap_or()`  or [pattern matching](https://doc.rust-lang.org/book/ch06-02-match.html) to deal with the alternative cleanly!
+That `from_str` call we do to get our default `"poetry.txt"` `&str` value into a `PathBuf` is part of the `FromStr` and only works when that [trait](https://doc.rust-lang.org/book/ch10-02-traits.html) is in scope.  It's an operation that can fail - for example, with a malformed path - so it returns a `Result<T, E>`.  You can get at the `T` of those with `unwrap()` if you're sure you'll have one.  We know this one won't fail because we just made the input ourselves and it's not a malformed path, just a filename with an extension.  If you don't have something valid this will panic and crash.  It's almost always better to use something like `unwrap_or()`  or [pattern matching](https://doc.rust-lang.org/book/ch06-02-match.html) to deal with the alternative cleanly!
 
 Next we pass both in to an error-checked function.  It's good practice to take advantage of Rust's error handling for as much of your program as possible - this is a good way to force it!
 
@@ -89,21 +91,21 @@ fn run(input: PathBuf, length: u32) -> Result<(), Box<dyn Error>> {
 }
 ```
 
-The meat of our program isn't going to need to deal with those options, and we return a `Result<(), Box<Error>`.  `()` stands for `unit`, or the empty tuple - nada, zilch, `void`.  `Box<dyn Error>` merits a little more explaining.  A [`Box<T>`](https://doc.rust-lang.org/std/boxed/index.html) is a boxed value - a basic heap-allocated value of type `T`.  Specifically the `Box` is a pointer to it, but a Rust-y smart pointer that knows about ownership and borrowing.  It's got a big name but it's just a pointer, nothing else.  The thing in the box is a [*trait object*](https://doc.rust-lang.org/book/ch17-02-trait-objects.html).  `Error` from `std::error` is a trait that many types implement.  Using `dyn Error` we cover any type that implements the `Error` trait. This allows us to pass and catch many different types of errors in one function easily.
+The meat of our program isn't going to need to deal with those options, and we return a `Result<(), Box<Error>`.  Our success type, `()` stands for `unit` which is the or the empty tuple or `void`.  `Box<dyn Error>` merits a little more explaining.  A [`Box<T>`](https://doc.rust-lang.org/std/boxed/index.html) is a boxed value - a basic heap-allocated value of type `T`.  Specifically the `Box` is a pointer to it, but a Rust-y smart pointer that knows about ownership and borrowing.  It's got a big name but it's just a pointer, nothing else.  This is useful because the `Box` has a size known at compile time, even if the value it points to may not.  The thing in the box with the `dyn Trait` syntax is a [*trait object*](https://doc.rust-lang.org/book/ch17-02-trait-objects.html).  `Error` from `std::error` is a trait that many types implement.  Using `dyn Error` we cover any type that implements the `Error` trait. This allows us to pass and catch many different types of errors in one function easily.
 
-If you're brand new to Rust and that was a little too breezy, you're in for a treat someday but don't worry - this part isn't necessary to understand the Markov bits below!
+If you're brand new to Rust and that was a little too breezy, you're in for a real treat outside the scope of this post but don't worry - this part isn't necessary to understand the Markov bits below!  It's just some Rust boilerplate for clean and happy error handling without much setup.
 
 Let's fire it up!  See if the help string is working with:
 
 ```
 $ cargo run -- -h
     Finished dev [unoptimized + debuginfo] target(s) in 0.04s
-     Running `target/debug/rebuild-markov -h`
+     Running `target/debug/markov -h`
 markov 0.1.0
-deciduously <ben@deciduously.com>
+you <you@you.cool>
 
 USAGE:
-    rebuild-markov [OPTIONS]
+    markov [OPTIONS]
 
 FLAGS:
     -h, --help       Prints help information
@@ -114,7 +116,7 @@ OPTIONS:
     -l, --length <length>    Output length
 ```
 
-Groovy!  Don't forget:
+Groovy!  Thanks, structopt.  Don't forget:
 
 ```
 $ git init
@@ -123,6 +125,8 @@ $ git commit -m "Initial commit"
 ```
 
 ### Markov!
+
+This is my favorite run so far on the poetry set:
 
 ```
 $ cargo run --release
@@ -151,7 +155,7 @@ Many indeed are the men
 With spears gathering at his feet: and my evening hours.
 
 Last evening when it rests,
-Leaves to be 
+Leaves to be
 Of work may be shared by not crossing the line,
 Though that same morning officers and men.
 

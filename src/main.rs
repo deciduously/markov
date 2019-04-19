@@ -65,7 +65,7 @@ fn run(input: PathBuf, length: u32) -> Result<(), Box<dyn Error>> {
     for _ in 0..length {
         print!("{} ", w2);
         // do we need to do this before reassigning?
-        w2 = &transition[&(w0, w1)].choose(&mut rng).unwrap();
+        w2 = &transition[&(w0, w1)].choose(&mut rng).unwrap_or(&"NONE");
         w0 = w1;
         w1 = w2;
     }
