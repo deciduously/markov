@@ -10,7 +10,7 @@ You shouldn't need to know Rust to follow along.
 
 ### On Your Marks
 
-If you're just here for the Markov Chain algorithm and not the Rust, skip down to the **Markov** section.
+If you're just here for the Markov Chain algorithm and not the Rust, skip down to the **Markov!** section.
 
 This project requires stable [Rust](https://rustup.rs/).  Go there to get it if you need, and then spin up a project:
 
@@ -129,6 +129,41 @@ $ git commit -m "Initial commit"
 ```
 
 ### Markov!
+
+The basic idea of this method of text generation is to choose the next word based on the current words.  Makes sense, right?  This algorithm never cares about more than two words at a time - it just knows all the possible options that come after that particular word duo from the source text.  Before we can start spewing out beautiful nonsense, we need to catalog .
+
+We can implement this in Rust with a [HashMap](https://doc.rust-lang.org/std/collections/struct.HashMap.html) as a lookup table.  One word doesn't quite give us enough context for realistic generation, though, so the keys of this hashmap will actually be combinations of two words.  These keys can be any type that implement the [`Eq`](https://doc.rust-lang.org/std/cmp/trait.Eq.html) and [`Hash`](https://doc.rust-lang.org/std/hash/trait.Hash.html) traits, and a tuple of two strings works just fine.  We'll then store for the corresponding value every word in our source text that ever follows the combination of those two.  This way we can look up words likely to come next based on the current two words we have in our text.
+
+Here's a concrete example what our hashmap might look like built from the source text "bears are big and bears are furry and bears are strong":
+
+```rust
+{
+    ("bears", "are"): ["big", "furry", "strong"],
+    ("and", "bears"): ["are"],
+    ("are", "big"): ["and"],
+    ("are", "furry"): ["and"],
+    ("big", "and"): ["bears"],
+    ("furry", "and"): ["bears"],
+}
+```
+
+This source text would not provide terribly interesting output, but it demonstrates how this will work on a larger scale.  If our current selection is the words "are big", the only option in our table is the word "and" so we append that to our output.  Now our current selection is "big and", which also only has one option: "bears".  That leads us to look up "and bears", which comes back with "are", and now we get to randomly choose any of our options from the words stored under "bears are".
+
+Our next word of the randomly generated text will always be pulled from this lookup table of words that do follow our current two words in the real text, which will (often) result in real-sounding sentences getting strung together even though each run through the loop is only ever aware of exactly where it is and nothing else.  On each iteration we perform a lookup of the proper tuple and select one of the options stored there at random.  Rinse and repeat for the length of the desired text!  Boom, nonsense.  The bigger the source text, the more interesting the output.
+
+The first step in building this is to read in the source text.  This function will accept a `PathBuf` (which we've collected from the user already) and attempt to return the file's contents as a string:
+
+```rust
+fn read_file(filename: PathBuf) -> Result<String, Box<dyn Error>> {
+    let file = OpenOptions::new().read(true).open(filename)?;
+    let mut contents = String::new();
+    let mut bfr = BufReader::new(file);
+    bfr.read_to_string(&mut contents)?;
+    Ok(contents)
+}
+```
+
+That return type is familiar from up above - this operation can fail, so we're wrapping it in a `Result<T, E>`.  The `T` here is the successfully read `String`, and our `E` is that trait object sweetness to catch any and all error types that may get thrown along the way.
 
 This is my favorite run so far on the poetry set:
 
