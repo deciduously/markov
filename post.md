@@ -248,7 +248,7 @@ TODO - TEST OUT WORD SPLITTING
 
 ### Get Organized
 
-To build the lookup table, we want to look at three words at a time.  The first two will be used for the key, and the third will be appended to the list of possible options.  That is, we're going to want to look at the first, second, and third word, then the second, third, and fourth word, then the third, fourth, and fifth word, and so on.  The most concise way to build a nice handy iterator for this is the `izip!()` macro found in the [`itertools`]() crate: `$ cargo add itertools`.
+To build the lookup table, we want to look at three words at a time.  The first two will be used for the key, and the third will be appended to the list of possible options.  That is, we're going to want to look at the first, second, and third word, then the second, third, and fourth word, then the third, fourth, and fifth word, and so on.  The most concise way to build a nice handy iterator for this is the `izip!()` macro found in the [`itertools`](https://docs.rs/itertools/0.8.0/itertools/) crate: `$ cargo add itertools`.
 
 ```rust
 #[macro_use]
@@ -330,13 +330,15 @@ Now everything's in place for the generation loop:
         print!("{} ", w2);
 
         // choose the next word
-        w2 = &lookup[&(w0, w1)].choose(&mut rng).unwrap_or(&"NONE");
+        w2 = &lookup[&(w0, w1)].choose(&mut rng).unwrap();
         w0 = w1;
         w1 = w2;
     }
 ```
 
-We just printout whatever we've got stored in `w2`, add a space, and then use `w0` and `w1` to look up the next word.  Once we've selected in, we need to update `w0` and `w1`, advancing our cursor to the next triple.
+We just print out whatever we've got stored in `w2`, add a space, and then use `w0` and `w1` to look up the next word.  Once we've selected in, we need to update `w0` and `w1`, advancing our cursor to the next triple.
+
+The `unwrap()` call here is also safe because we'll never have a key corresponding to a zero-length list.  Every time we create a new key, we immediately push the following word to it.  The last iteration of the loop covers the last three owrds, so we'll always be able to do so.
 
 That's the whole program - fire it up with `cargo run --release`.  We provided sane default argument values, so you don't need to use the command line options we defined unless you want to.
 
