@@ -37,20 +37,26 @@ fn split_words<'a>(w: &'a str) -> Vec<&'a str> {
     spaces_re.split(w).collect::<Vec<&str>>()
 }
 
-fn run(input: PathBuf, length: u32) -> Result<(), Box<dyn Error>> {
-    let file_str = read_file(input)?;
-    let words = split_words(&file_str);
-
-    let mut transition: HashMap<(&str, &str), Vec<&str>> = HashMap::new();
+fn build_table(words: Vec<&str>) -> HashMap<(&str, &str), Vec<&str>> {
+    let mut ret = HashMap::new();
 
     // izip!() is from itertools crate
     // see if you can get this to happen without it!
     for (w0, w1, w2) in izip!(&words, &words[1..], &words[2..]) {
         // add w3 to the key (w1, w2)
-        let curr = transition.entry((w0, w1)).or_insert_with(Vec::new);
-        curr.push(w2);
+        let curr = ret.entry((*w0, *w1)).or_insert_with(Vec::new);
+        curr.push(*w2);
     }
 
+    ret
+}
+
+fn run(input: PathBuf, length: u32) -> Result<(), Box<dyn Error>> {
+    // read file and build lookup table
+    let file_str = read_file(input)?;
+    let words = split_words(&file_str);
+
+    // pick a start location
     // pick a random start between 0 and words.len() - 3
     let mut rng = thread_rng();
     let i = rng.gen_range(0, words.len() - 3);
@@ -60,12 +66,16 @@ fn run(input: PathBuf, length: u32) -> Result<(), Box<dyn Error>> {
     let mut w1 = words[i + 1];
     let mut w2 = words[i + 2];
 
-    // print current word and then a space, and update our words
+    // build the lookup table - takes ownership of words!
+    let lookup = build_table(words);
 
+    // each iteration, print current word and then a space, and update our words
     for _ in 0..length {
+        // append to output
         print!("{} ", w2);
-        // do we need to do this before reassigning?
-        w2 = &transition[&(w0, w1)].choose(&mut rng).unwrap_or(&"NONE");
+
+        // choose the next word
+        w2 = &lookup[&(w0, w1)].choose(&mut rng).unwrap_or(&"NONE");
         w0 = w1;
         w1 = w2;
     }
