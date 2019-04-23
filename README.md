@@ -11,12 +11,12 @@ A mini markov chain, translated from the [example by orangeduck](http://theorang
 ```
 $ cargo run -- -h
     Finished dev [unoptimized + debuginfo] target(s) in 0.04s
-     Running `target/debug/rebuild-markov -h`
+     Running `target/debug/markov -h`
 markov 0.1.0
 deciduously <ben@deciduously.com>
 
 USAGE:
-    rebuild-markov [OPTIONS]
+    markov [OPTIONS]
 
 FLAGS:
     -h, --help       Prints help information

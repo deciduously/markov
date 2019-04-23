@@ -1,16 +1,12 @@
 # Build You A Markov Chain In Rust (Or Whatever)
 
-## AKA 65 Line Markov Chain (A Rewrite)
+I've found a great way to ensure I've grokked a thing is to write it up in Rust.  In that spirit, this post covers a translation of the program in [this post](http://theorangeduck.com/page/17-line-markov-chain) by [orangeduck](http://theorangeduck.com/page/about) into Rust, with a minor difference and some extra explanation including about why writing Rust is the way it is.  Depending on your comfort level it may be skimmable, especially if you already got some Rust in you.  It will only take us 80 extra lines!
 
-I've found that if you can translate something into Rust, you pretty much understand it.  In that spirit, this post covers a translation of the program in [this post](http://theorangeduck.com/page/17-line-markov-chain) by [orangeduck](http://theorangeduck.com/page/about) in Rust, with a little extra explanation.  In fact, it will probably move a little slow - depending on your comfort level, it may be skimmable!  You should be able to knock one out in whatever language you like after.
+A [Markov chain](https://en.wikipedia.org/wiki/Markov_chain) can be used to generate realistic(ish) sounding random text based on a sample input.  The Wikipedia article is somewhat opaque, as Wikipedia can tends to be, but at it's heart it's a very simple concept in which the next word is chosen based entirely on the current two words.  It's surprisingly simple (at least, I was surprised at how easy it was) and yet generates some real-sounding(ish) text with minimal effort.  For a fun example of this in action, check out the subreddit [/r/SubredditSimulator](https://www.reddit.com/r/SubredditSimulator/).  All of the posts and comments found there are generated using Markov chains using their respective subreddits as input data.
 
-A [Markov chain](https://en.wikipedia.org/wiki/Markov_chain) can be used to generate realistic(ish) sounding random text based on a sample input.  The Wikipedia article is somewhat opaque, as Wikipedia can tends to be, but at it's heart it's a very simple concept in which the next word is chosen based entirely on the current two words.  It's surprisingly simple (at least, I was surprised at how easy it was) and yet generates some real-sounding(ish) text with minimal effort.  For a fun example of this in action, check out the subreddit [/r/SubredditSimulator](https://www.reddit.com/r/SubredditSimulator/).  All of the posts and comments found there are generated using markov chains using their respective subreddits as input data.
+## On Your Marks
 
-You shouldn't need to know Rust to follow along.
-
-### On Your Marks
-
-If you're just here for the Markov Chain algorithm and not the Rust, skip down to the **Markov!** section.
+If you're just here for the Markov Chain algorithm and not the Rust, skip down to "The Algorithm" in the **Markov!** section.
 
 This project requires stable [Rust](https://rustup.rs/).  Go there to get it if you need, and then spin up a project:
 
@@ -19,15 +15,17 @@ $ cargo new markov
 $ cd markov/
 ```
 
-### Get Set
+## Get Set
 
 Before hopping in, a quick 'n' dirty CLI would be nice for playing around with different inputs.  Luckily, Rust has a great option in [structopt](https://github.com/TeXitoi/structopt).  From the project root:
+
+I like to use `cargo-add` from rapid experimentation: `$ cargo install cargo-add` from any dir to add it to cargo.
 
 ```
 $ cargo add structopt
 ```
 
-As the name implies this crate makes it easy to define an interface by simply defining a struct.  Add the following to the top of `src/main.rs`:
+As the name implies this crate makes it easy to define an interface by simply defining a struct.  It uses macros to handle all the code generation required.  Add the following to the top of `src/main.rs`:
 
 ```rust
 use std::{error::Error, path::PathBuf, str::FromStr};
@@ -45,7 +43,15 @@ struct Opt {
 }
 ```
 
-The doc comments with the three slashes end up in the help string this crate will generate for us.  An example format for this struct would be something like `./markov -i poetry.txt -l 500`.  The long names are used with two dashes, like `--length`.  We type each as `Option<T>`, which means if either is omitted when the program is invoked this struct will just hold a `None`.  A `PathBuf` is a fancy owned `String` with [cross-platform path abstractions](https://doc.rust-lang.org/std/path/index.html) built in.  You can `push` to them and traverse them the same way on whichever platform your code runs.
+We're auto-deriving two [traits](https://doc.rust-lang.org/book/ch10-02-traits.html), `StructOpt` and `Debug`.  The latter is like `toString()` from Java, it creates a string representation of the struct, and the StructOpt one is going to give us methods like `from_args()` to instantiate it from the command line arguments automatically.  It also leverages a special custom tag `#[structopt]` which is used to configure the behavior of this macro.
+
+The doc comments with the three slashes end up in the help string this crate will generate for us.  An example format for this struct would be something like `./markov -i poetry.txt -l 500`.  You can use cargo directly with `cargo run -- -i poetry.txt -l 500`.  The long names are used with two dashes, like `--length`.
+
+Each field has a type like `Option<T>`, which means if either is omitted when the program is invoked this struct will just hold a `None`.  If you're not used to that syntax, any time you see a single capital letter it stands for a generic type.  A real value you use would be specifically typed, such as `Option<String>`.
+
+A `PathBuf` is a fancy `String` with [cross-platform path abstractions](https://doc.rust-lang.org/std/path/index.html) built in.  You can `push()` to them and traverse them the same way in Rust code on whichever platform it runs.
+
+Otherwise, though, this is just a regular old Rust struct, it's just got a fancy custom `impl StructOpt {}` block generated for us.
 
 Now, replace the template `println!` call given in `main()` with:
 
@@ -54,7 +60,7 @@ fn main() {
     let opt = Opt::from_args();
     let filename = opt
         .input
-        .unwrap_or(PathBuf::from_str("poetry.txt").unwrap());
+        .unwrap_or_else(|| PathBuf::from_str("poetry.txt").unwrap());
     let length = opt.length.unwrap_or(350);
 
     if let Err(e) = run(filename, length) {
@@ -66,7 +72,7 @@ fn main() {
 
 If you're not new to Rust, that's probably fine and dandy.  If you are, let's unpack it a little.
 
-First, we generate the struct itself from whatever was passed on the command line.  In the line `let opt = Opt::from_args()`, `Opt` is the struct we defined just above.  We can call the `from_args()` method on it because we derived the `StructOpt` *trait* for this struct with the `#[derive(StructOpt, Debug)]` line.  For the `./markov -i poetry.txt -l 500` example from above, we now have stored in the variable `opt`:
+First, we generate the struct itself from whatever was passed on the command line.  In the line `let opt = Opt::from_args()`, `Opt` is the struct we defined just above, flexing its fancy code-gen'd `from_args()` method.  If this program were invoked as `cargo run -- -i poetry.txt -l 500` example from above, we now have stored in the variable `opt`:
 
 ```rust
 Opt(
@@ -79,13 +85,13 @@ All in-memory data structures will be presented in [RON](https://github.com/ron-
 
 Note that the guts of `PathBuf` are omitted - it's an [`OsString`](https://doc.rust-lang.org/std/ffi/struct.OsString.html) if you're curious but we just care it's a `PathBuf`.
 
-The first thing to do is get something more concrete from those options to pass in to the program.  Using `unwrap_or()` is a great way to do this.  If the value is a `Some(thing)` it returns `thing`, and if it's `None` it returns the passed argument, and it's gotta be one of those two.
+The first thing to do is get something more concrete from those options to pass in to the program.  Using `unwrap_or_else()` is a great way to do this.  If the value is a `Some(thing)` it returns `thing`, and if it's `None` it calls the passed closure, and it's gotta be one of those two.  If you just need a default value and not a function call, you can just use `unwrap_or()`.
 
-That `from_str` call we do to get our default `"poetry.txt"` `&str` value into a `PathBuf` is part of the `FromStr` trait and only works when that [trait](https://doc.rust-lang.org/book/ch10-02-traits.html) is in scope.  It's an operation that can fail - for example, with a malformed path - so it returns a `Result<T, E>`.  This type acts like `Either` from Haskell, it either contains an `Ok(something: T)` or an `Err(error: E)` value.  You can get at the `T` of those with `unwrap()` if you're sure you'll have an `Ok`.  We know this one won't fail because we just made the input ourselves and it's not a malformed path, just a filename with an extension.  If you don't have something valid this will panic and crash.  It's almost always better to use something like `unwrap_or()`  or [pattern matching](https://doc.rust-lang.org/book/ch06-02-match.html) to deal with the alternative cleanly!
+That `from_str` call we do to get our default `"poetry.txt"` `&str` value into a `PathBuf` is part of the `FromStr` trait and only works when that trait is in scope.  It's an operation that can fail - for example, with a malformed path - so it returns a `Result<T, E>`.  This type acts like `Either` from Haskell if you're familiar, it either contains an `Ok(something: T)` or an `Err(error: E)` value.  You can get at the `T` of those with `unwrap()` if you're sure you'll have a successful `Ok` return value.  We know this one won't fail because we just made the input ourselves and it's not a malformed path, just a filename with an extension.  If you don't have something valid this will panic and crash.  It's almost always better to use something like `unwrap_or()`  or [pattern matching](https://doc.rust-lang.org/book/ch06-02-match.html) to deal with the alternative cleanly!
 
-Next we pass both in to an error-checked function.  It's good practice to take advantage of Rust's error handling for as much of your program as possible - this is a good way to force it!  The `if let` syntax is a way of capturing any error.  Our `run()` function here is going to return a `Result<T, E>`.   When called like this, if it ends up returning an `Ok(_)` nothing will happen, but if anything inside returns an error at any point, we'll execute the code path in this if block.  It uses destructuring - this line is saying that if the return value of `run()` can be destructured into an `Err(e)`, run this code.  The alternative is `Ok(_)` - in which case we know everything went fine, and there's no action to take.  If we wanted to do something else, we could have included an `else {}` block as well.  This error catch will use `eprintln!` to display the specific error information returned on `stderr` and end the program with an error code of 1, indicating it was not successful.
+Next we pass both in to an error-checked function.  It's good practice to take advantage of Rust's error handling for as much of your program as possible - this is a good way to force it!  The `if let` syntax is a way of capturing any error.  Our `run()` function here is also going to return a `Result<T, E>` - they're a bit of a theme in Rust.  It's sort of like a big try/catch embedded in the type system.  When called in an `if let`, if it ends up returning an `Ok(_)` nothing will happen.  If anything inside returns an error of any type (more on that in a moment) at any point, we'll execute the code path in this if block.  It uses destructuring - this line is saying that if the return value of `run()` can be destructured into an `Err(e)`, run this code.  The only alternative variant is `Ok(val)` - in which case we know everything went fine, and there's no action to take.  If we wanted to do something else, we could have included an `else {}` block as well.  This error catch will use `eprintln!` to display the specific error information returned on `stderr` and end the program with an error code of 1, indicating it was not successful.
 
-Of course, we need a properly typed `run()` function.  Here's a stub, just to get us to compile:
+Of course, now we need a properly typed `run()` function.  Here's a stub, just to get us to compile:
 
 ```rust
 fn run(input: PathBuf, length: u32) -> Result<(), Box<dyn Error>> {
@@ -93,9 +99,9 @@ fn run(input: PathBuf, length: u32) -> Result<(), Box<dyn Error>> {
 }
 ```
 
-The meat of our program expects concrete values, not `Option<T>`, and like good responsible Rustaceans we return a `Result<T, E>`, specifcally a `Result<(), Box<dyn Error>`.  Our success type, `()` stands for `unit` which is the empty tuple, akin to `void`.  This demo will just be outputting our random text to `stdout`, there's no value to return.  If you wanted to store the generated text and pass it to another part of your program, this might look like `Result<String, Box<dynError>>`.  The `Box<dyn Error>` type we're using for the Error type merits a little more explaining.
+The meat of our program expects concrete values, not `Option<T>`, and like good responsible Rustaceans we return a `Result<T, E>`, specifically a `Result<(), Box<dyn Error>`.  Our success type, `()` stands for `unit` which is the empty tuple, akin to `void`.  This demo will just be outputting our random text to `stdout`, there's no value to return.  If you wanted to store the generated text and pass it to another part of your program, this might look like `Result<String, Box<dynError>>`.  The `Box<dyn Error>` type we're using for the Error type merits a little more explaining.
 
-A [`Box<T>`](https://doc.rust-lang.org/std/boxed/index.html) is a boxed value - a basic heap-allocated value of type `T`.  Specifically the `Box` is a pointer to it, but a Rust-y smart pointer that knows about ownership and borrowing.  It's got a big name but it's just a pointer, nothing else.  This is useful because the `Box` has a size known at compile time, even if the value it points to may not.  The thing in the box with the `dyn Trait` syntax is a [*trait object*](https://doc.rust-lang.org/book/ch17-02-trait-objects.html).  `Error` from `std::error` is a trait that many types implement.  Using `dyn Error` we cover any type that implements the `Error` trait. This allows us to pass and catch many different types of errors in one function easily.
+A [`Box<T>`](https://doc.rust-lang.org/std/boxed/index.html) is a boxed value - a basic heap-allocated value of type `T`.  Specifically the `Box` is a pointer to it, but a Rust-y smart pointer that knows about ownership and borrowing.  It's got a big name but it's just a pointer, nothing else.  This is useful because the `Box` has a size known at compile time, even if the value it points to may not.  The thing in the box with the `dyn Trait` syntax is a [*trait object*](https://doc.rust-lang.org/book/ch17-02-trait-objects.html).  `Error` from `std::error` is a trait that many different types of more specific errors types implement.  Using `dyn Error` we cover any type that implements the `Error` trait. This allows us to pass and catch all the different types of errors in one function easily.
 
 If you're brand new to Rust and that was a little too breezy, you're in for a real treat outside the scope of this post but don't worry - this part isn't necessary to understand the Markov bits below!  It's just some Rust boilerplate for clean and happy error handling without much setup.
 
@@ -128,13 +134,15 @@ $ git add .
 $ git commit -m "Initial commit"
 ```
 
-### Markov!
+## Markov!
 
-The basic idea of this method of text generation is to choose the next word based on the current words.  Makes sense, right?  This algorithm never cares about more than two words at a time - it just knows all the possible options that come after that particular word duo from the source text.  Before we can start spewing out beautiful nonsense, we need to catalog .
+### The Algorithm
 
-We can implement this in Rust with a [HashMap](https://doc.rust-lang.org/std/collections/struct.HashMap.html) as a lookup table.  One word doesn't quite give us enough context for realistic generation, though, so the keys of this hashmap will actually be combinations of two words.  These keys can be any type that implement the [`Eq`](https://doc.rust-lang.org/std/cmp/trait.Eq.html) and [`Hash`](https://doc.rust-lang.org/std/hash/trait.Hash.html) traits, and a tuple of two strings works just fine.  We'll then store for the corresponding value every word in our source text that ever follows the combination of those two.  This way we can look up words likely to come next based on the current two words we have in our text.
+The idea of this method of text generation is to choose the next word based entirely on the current two words, using only words that appear after them in the source text.  This algorithm never cares about more than two words at a time - it just knows all the possible options that come after that particular word duo.  Before we can start spewing out beautiful nonsense, then, we need to catalog the input.
 
-Here's a concrete example what our hashmap might look like built from the source text "bears are big and bears are furry and bears are strong":
+We can implement this in Rust with a [HashMap](https://doc.rust-lang.org/std/collections/struct.HashMap.html) as a lookup table.  One word doesn't quite give us enough context for realistic generation, though, so the keys of this hashmap will actually be combinations of two words.  These keys can be any type that implement the [`Eq`](https://doc.rust-lang.org/std/cmp/trait.Eq.html) and [`Hash`](https://doc.rust-lang.org/std/hash/trait.Hash.html) traits, and a tuple of two [string slices](https://doc.rust-lang.org/book/ch04-03-slices.html#string-slices) `(&str, &str)` works just fine.  We'll then store for the corresponding value every word in our source text that ever follows the combination of those two.  This way we can look up words likely to come next based on the current two words we have in our text.
+
+Here's a concrete example what our hashmap might look like if built from the source text "bears are big and bears are furry and bears are strong":
 
 ```rust
 {
@@ -147,11 +155,38 @@ Here's a concrete example what our hashmap might look like built from the source
 }
 ```
 
-This source text would not provide terribly interesting output, but it demonstrates how this will work on a larger scale.  If our current selection is the words "are big", the only option in our table is the word "and" so we append that to our output.  Now our current selection is "big and", which also only has one option: "bears".  That leads us to look up "and bears", which comes back with "are", and now we get to randomly choose any of our options from the words stored under "bears are".
+This source text would not provide terribly interesting output, but it demonstrates how this will work on a larger scale.  First, you pick a random spot in the source text.  Let's go for "bears are" (randomly, I promise).  Stepping through a few iterations:
+
+1. Output: "bears are".  Look up `("bears", "are")`.  Randomly select "furry" from the three stored options and append it to the output.
+
+2. Output: "bears are furry".  Look up `("are", "furry")`.  The only option stored is "and".  Append to output.
+
+3. Output: "bears are furry and".  Look up `("big", "and")`, append the only option "bears".
+
+4. Output: "bears are furry and bears".  Look up `("and, bears")`, append "are".
+
+5. Output: "bears are furry and bears are". Look up `("bears", "are")`.  Randomly select "strong" from the three stored options.
+
+6. Output: "bears are furry and bears are big".  Look up `("are", "big")`, append "and".
+
+And so forth.  We generate a random output string of arbitrary length that resembles the source text.  The words will always sort of seem to make sense after one another as long as your input text did, and will actually sort of emulate the style.  Take a moment now and go back to the [orangeduck python post](http://theorangeduck.com/page/17-line-markov-chain) to grab the poetry set he created.  It's quite large (over 1.8 million lines!) and distributed as a zip file.  Unzip it into your project root as `poetry.txt`.  It's a great one because it's got a few different languages and several styles of poetry so successive runs will usually give you something pretty unique.
 
 Our next word of the randomly generated text will always be pulled from this lookup table of words that do follow our current two words in the real text, which will (often) result in real-sounding sentences getting strung together even though each run through the loop is only ever aware of exactly where it is and nothing else.  On each iteration we perform a lookup of the proper tuple and select one of the options stored there at random.  Rinse and repeat for the length of the desired text!  Boom, nonsense.  The bigger the source text, the more interesting the output.
 
-The first step in building this is to read in the source text.  This function will accept a `PathBuf` (which we've collected from the user already) and attempt to return the file's contents as a string:
+The first step in building this is to read in the source text.  First, tweak your `std` imports:
+
+```rust
+use std::{
+    collections::HashMap,
+    error::Error,
+    fs::OpenOptions,
+    io::{BufReader, Read},
+    path::PathBuf,
+    str::FromStr,
+};
+```
+
+This function will accept a `PathBuf` (which we've collected from the user already) and attempt to return the file's contents as a string:
 
 ```rust
 fn read_file(filename: PathBuf) -> Result<String, Box<dyn Error>> {
@@ -163,7 +198,54 @@ fn read_file(filename: PathBuf) -> Result<String, Box<dyn Error>> {
 }
 ```
 
-That return type is familiar from up above - this operation can fail, so we're wrapping it in a `Result<T, E>`.  The `T` here is the successfully read `String`, and our `E` is that trait object sweetness to catch any and all error types that may get thrown along the way.
+That return type is familiar from up above - this operation can fail if, for instance, there is no file at the path specified, so we're wrapping it in a `Result<T, E>`.  The `T` here is the successfully read `String`, and our `E` is that nifty trait object to catch any and all error types that may get thrown along the way.
+
+Any variable that we need to mutate has to be explicitly marked as such with `mut`.  By default any attempt to mutate the value stored in a `let` binding will fail to compile.
+
+In the first line it attempts to open the file at the path passed in with read permissions only.  It's got a question mark at the end, which is a shorthand way of saying automatically unwrapping the return value if it's an `Ok(val)` and early-returning this function with `Err(the error returned)`.  Quite handy!  The expansion would look something like:
+
+```rust
+let file = match OpenOptions::new().read(true).open(filename) {
+    Ok(f) => f,
+    Err(e) => return Err(e),
+}
+```
+
+This is pretty reasonable behavior as syntactic sugar goes.  It only works inside a function that returns a `Result<T, E>`, though, which justifies all this hullabaloo.  You can't use `?` in `main()`, for instance.
+
+Now that our file is open, we use a [`BufReader`](https://doc.rust-lang.org/std/io/struct.BufReader.html) to read the contents into a heap-allocated `String` called `contents`.  This is going to be the only memory on the heap we'll allocate for it - everything else will just reference this `String`.  Note that the `BufReader` itself must be mutable as well as our target string.  From the docs: "A BufReader performs large, infrequent reads on the underlying Read and maintains an in-memory buffer of the results."
+
+The `read_to_string()` method from the [`Read`](https://doc.rust-lang.org/std/io/trait.Read.html) trait also uses `?` to catch any errors that may happen.  If everything has succeeded, our source text is sitting snugly inside this massive string, so we can wrap it in an `Ok()` and get going.  Go ahead and pop it in `run()`:
+
+```rust
+fn run(input: PathBuf, length: u32) -> Result<(), Box<dyn Error>> {
+    let file_str = read_file(input)?;
+    println!("{}", file_str);
+    Ok(())
+}
+```
+
+If you've got `poetry.txt` in place, `cargo run` should now display the entire contents, at least until you get bored and interrupt it.
+
+Next up, we've got to split it in to individual words.  We want to preserve things like newlines.  As orangeduck points out, in poetry especially line endings are part of the structure the output should resemble.  To do this we'll use a regular expression via the regex crate: `$ cargo add regex`.
+
+Here's a function that will carry out this operation:
+
+```rust
+// ..
+use regex::Regex;
+//..
+fn split_words(w: &str) -> Vec<&str> {
+    let spaces_re = Regex::new(r" +").unwrap();
+    spaces_re.split(w).collect::<Vec<&str>>()
+}
+```
+
+This function is going to allocate a new `Vec`, but inside we're only going to store references to our file string.  We don't need to change the input, just look at it in order to build this vector.  By just taking a reference to the string in the arguments, we don't move ownership of the input away from the original binding.
+
+The first line defines the regular expression - instead of wrapping this whole function in a `Result`, I'm just promising the compiler (and you) that `r" +"` constitutes a valid `Regex` and using a plain old `unwrap()` on the `Result` that `Regex::new()` returns.  This function would return an error if passed an invalid regular expression.  We know this won't panic, it will just match one or more spaces ignoring anything else like tabs and newlines.  Different inputs may require different regexes for optimal output.  Then we return the result of calling the `split()` method using this regex and using `collect()` to return the resulting [`Iterator`](https://doc.rust-lang.org/std/iter/trait.Iterator.html) as a `Vec<&str>`.
+
+
 
 This is my favorite run so far on the poetry set:
 
