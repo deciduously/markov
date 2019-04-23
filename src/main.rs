@@ -37,13 +37,27 @@ fn read_file(filename: PathBuf) -> Result<String, Box<dyn Error>> {
 // this way doesnt use the Regex - if it works, remove dep
 // it doesnt match multiple spaces, but those should be empty cells, which we can filter maybe?
 // it returns an iterator
-fn read_and_split_file(filename: &Path) -> Result<Vec<Box<str>>, Box<dyn Error>> {
+fn read_and_split_file(filename: &Path) -> Result<Vec<&str>, Box<dyn Error>> {
     let file = OpenOptions::new().read(true).open(filename)?;
     let mut ret = Vec::new();
     let mut bfr = BufReader::new(file);
     // not quite, this returns a Vec<u8>
     // use read_line() just continually until EOF, when you'll get a zero byte bit
     //ret = bfr.split(32).map(|w| w.unwrap()).collect();
+
+    let mut last_size = 1;
+    while last_size > 0 {
+        let mut current_line = String::new();
+        // grab current line
+        last_size = bfr.read_line(&mut current_line).unwrap();
+        // store the words
+        let spaces_re = Regex::new(r" +").unwrap();
+        for w in spaces_re.split(&current_line).collect::<Vec<&str>>() {
+            // Box<str> ??
+            ret.push(w)
+        }
+    }
+
     Ok(ret)
 }
 
