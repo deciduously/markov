@@ -379,3 +379,5 @@ Continues yet the dream
 ```
 
 Continues, yet, the dream...
+
+See [this repo](https://github.com/deciduously/markov) for the full code.
