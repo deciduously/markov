@@ -4,12 +4,7 @@ extern crate itertools;
 use rand::{seq::SliceRandom, thread_rng, Rng};
 use regex::Regex;
 use std::{
-    collections::HashMap,
-    error::Error,
-    fs::OpenOptions,
-    io::{BufRead, BufReader, Read},
-    path::{Path, PathBuf},
-    str::FromStr,
+    collections::HashMap, error::Error, fs::OpenOptions, io::Read, path::PathBuf, str::FromStr,
 };
 use structopt::StructOpt;
 
@@ -24,41 +19,11 @@ struct Opt {
     length: Option<u32>,
 }
 
-// instead of a string, read directly to the Vec
 fn read_file(filename: PathBuf) -> Result<String, Box<dyn Error>> {
-    let file = OpenOptions::new().read(true).open(filename)?;
+    let mut file = OpenOptions::new().read(true).open(filename)?;
     let mut contents = String::new();
-    let mut bfr = BufReader::new(file);
-    bfr.read_to_string(&mut contents)?;
+    file.read_to_string(&mut contents)?;
     Ok(contents)
-}
-
-// faster?!
-// this way doesnt use the Regex - if it works, remove dep
-// it doesnt match multiple spaces, but those should be empty cells, which we can filter maybe?
-// it returns an iterator
-fn read_and_split_file(filename: &Path) -> Result<Vec<&str>, Box<dyn Error>> {
-    let file = OpenOptions::new().read(true).open(filename)?;
-    let mut ret = Vec::new();
-    let mut bfr = BufReader::new(file);
-    // not quite, this returns a Vec<u8>
-    // use read_line() just continually until EOF, when you'll get a zero byte bit
-    //ret = bfr.split(32).map(|w| w.unwrap()).collect();
-
-    let mut last_size = 1;
-    while last_size > 0 {
-        let mut current_line = String::new();
-        // grab current line
-        last_size = bfr.read_line(&mut current_line).unwrap();
-        // store the words
-        let spaces_re = Regex::new(r" +").unwrap();
-        for w in spaces_re.split(&current_line).collect::<Vec<&str>>() {
-            // Box<str> ??
-            ret.push(w)
-        }
-    }
-
-    Ok(ret)
 }
 
 // is there a way not to allocate this Vec?
@@ -67,13 +32,29 @@ fn split_words(w: &str) -> Vec<&str> {
     spaces_re.split(w).collect::<Vec<&str>>()
 }
 
-// use BufReader::read_lines()
-// Allocate a vector of some size, bigger than any line will be?  [&str; 32]?
-
 fn build_table(words: Vec<&str>) -> HashMap<(&str, &str), Vec<&str>> {
     let mut ret = HashMap::new();
     for (w0, w1, w2) in izip!(&words, &words[1..], &words[2..]) {
-        // add w3 to the key (w1, w2)
+        // add w2 to the key (w0, w1)
+        let current = ret.entry((*w0, *w1)).or_insert_with(Vec::new);
+        current.push(*w2);
+    }
+    ret
+}
+
+// Unused - just to demonstrate
+fn _build_table_no_itertools(words: Vec<&str>) -> HashMap<(&str, &str), Vec<&str>> {
+    let mut ret = HashMap::new();
+    let all_words = &words[..];
+    let offset_1 = &words[1..];
+    let offset_2 = &words[2..];
+    for (w0, w1, w2) in all_words
+        .iter()
+        .zip(offset_1.iter())
+        .zip(offset_2.iter())
+        .map(|((x, y), z)| (x, y, z))
+    {
+        // add w2 to the key (w0, w1)
         let current = ret.entry((*w0, *w1)).or_insert_with(Vec::new);
         current.push(*w2);
     }

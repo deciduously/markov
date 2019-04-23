@@ -1,6 +1,6 @@
 # Build You A Markov Chain In Rust (Or Whatever)
 
-I've found a great way to ensure I've grokked a thing is to write it up in Rust.  In that spirit, this post covers a translation of the program in [this post](http://theorangeduck.com/page/17-line-markov-chain) by [orangeduck](http://theorangeduck.com/page/about) into Rust, with a minor difference and some extra explanation including about why writing Rust is the way it is.  Depending on your comfort level it may be skimmable, especially if you already got some Rust in you.  It will only take us 80 extra lines!
+I've found a great way to ensure I've grokked a thing is to write it up in Rust.  In that spirit, this post covers a translation of the program in [this post](http://theorangeduck.com/page/17-line-markov-chain) by [orangeduck](http://theorangeduck.com/page/about) into Rust, with a minor difference and some extra explanation including about why writing Rust is the way it is.  Depending on your comfort level it may be skimmable, especially if you already got some Rust in you.  It will only take us 70 extra lines!
 
 A [Markov chain](https://en.wikipedia.org/wiki/Markov_chain) can be used to generate realistic(ish) sounding random text based on a sample input.  The Wikipedia article is somewhat opaque, as Wikipedia can tends to be, but at it's heart it's a very simple concept in which the next word is chosen based entirely on the current two words.  It's surprisingly simple (at least, I was surprised at how easy it was) and yet generates some real-sounding(ish) text with minimal effort.  For a fun example of this in action, check out the subreddit [/r/SubredditSimulator](https://www.reddit.com/r/SubredditSimulator/).  All of the posts and comments found there are generated using Markov chains using their respective subreddits as input data.
 
@@ -173,16 +173,13 @@ And so forth.  We generate a random output string of arbitrary length that resem
 
 Our next word of the randomly generated text will always be pulled from this lookup table of words that do follow our current two words in the real text, which will (often) result in real-sounding sentences getting strung together even though each run through the loop is only ever aware of exactly where it is and nothing else.  On each iteration we perform a lookup of the proper tuple and select one of the options stored there at random.  Rinse and repeat for the length of the desired text!  Boom, nonsense.  The bigger the source text, the more interesting the output.
 
+### Read Them In
+
 The first step in building this is to read in the source text.  First, tweak your `std` imports:
 
 ```rust
 use std::{
-    collections::HashMap,
-    error::Error,
-    fs::OpenOptions,
-    io::{BufReader, Read},
-    path::PathBuf,
-    str::FromStr,
+    collections::HashMap, error::Error, fs::OpenOptions, io::Read, path::PathBuf, str::FromStr,
 };
 ```
 
@@ -190,10 +187,9 @@ This function will accept a `PathBuf` (which we've collected from the user alrea
 
 ```rust
 fn read_file(filename: PathBuf) -> Result<String, Box<dyn Error>> {
-    let file = OpenOptions::new().read(true).open(filename)?;
+    let mut file = OpenOptions::new().read(true).open(filename)?;
     let mut contents = String::new();
-    let mut bfr = BufReader::new(file);
-    bfr.read_to_string(&mut contents)?;
+    file.read_to_string(&mut contents)?;
     Ok(contents)
 }
 ```
@@ -213,9 +209,11 @@ let file = match OpenOptions::new().read(true).open(filename) {
 
 This is pretty reasonable behavior as syntactic sugar goes.  It only works inside a function that returns a `Result<T, E>`, though, which justifies all this hullabaloo.  You can't use `?` in `main()`, for instance.
 
-Now that our file is open, we use a [`BufReader`](https://doc.rust-lang.org/std/io/struct.BufReader.html) to read the contents into a heap-allocated `String` called `contents`.  This is going to be the only memory on the heap we'll allocate for it - everything else will just reference this `String`.  Note that the `BufReader` itself must be mutable as well as our target string.  From the docs: "A BufReader performs large, infrequent reads on the underlying Read and maintains an in-memory buffer of the results."
+The `read_to_string()` method from the [`Read`](https://doc.rust-lang.org/std/io/trait.Read.html) trait also uses `?` to catch any errors that may happen.  If everything has succeeded, our source text is sitting snugly inside this massive string, so we can wrap it in an `Ok()` and get going.
 
-The `read_to_string()` method from the [`Read`](https://doc.rust-lang.org/std/io/trait.Read.html) trait also uses `?` to catch any errors that may happen.  If everything has succeeded, our source text is sitting snugly inside this massive string, so we can wrap it in an `Ok()` and get going.  Go ahead and pop it in `run()`:
+As an aside, I often reach for [`BufReader`](https://doc.rust-lang.org/std/io/struct.BufReader.html) by instinct.  This is a use case in which it won't help us, and actually might slow us down.  We're just reading this very large file in once to a single `String`, so we'd rather avoid the extra allocations doing a buffered read would add.
+
+Go ahead and pop it in `run()`:
 
 ```rust
 fn run(input: PathBuf, length: u32) -> Result<(), Box<dyn Error>> {
@@ -227,12 +225,13 @@ fn run(input: PathBuf, length: u32) -> Result<(), Box<dyn Error>> {
 
 If you've got `poetry.txt` in place, `cargo run` should now display the entire contents, at least until you get bored and interrupt it.
 
-Next up, we've got to split it in to individual words.  We want to preserve things like newlines.  As orangeduck points out, in poetry especially line endings are part of the structure the output should resemble.  To do this we'll use a regular expression via the regex crate: `$ cargo add regex`.
+### Split Them Up
+
+We can't work with just a massive `String`, though, we've got to split it in to individual words.  We want to preserve things like newlines for this operation.  As orangeduck points out, in poetry especially line endings are part of the structure the output should resemble.  To do this we'll use a regular expression via the regex crate: `$ cargo add regex`.
 
 Here's a function that will carry out this operation:
 
 ```rust
-// ..
 use regex::Regex;
 //..
 fn split_words(w: &str) -> Vec<&str> {
@@ -241,11 +240,105 @@ fn split_words(w: &str) -> Vec<&str> {
 }
 ```
 
-This function is going to allocate a new `Vec`, but inside we're only going to store references to our file string.  We don't need to change the input, just look at it in order to build this vector.  By just taking a reference to the string in the arguments, we don't move ownership of the input away from the original binding.
+This function is going to allocate a new `Vec`, but inside we're only going to store references to our original file string.  We don't need to change the input, just look at it in order to build this vector.  By just taking a reference to the string in the argument, we don't move ownership of the input away from the original binding.  Building this list causes no new copying or allocation involved beyond the `Vec` structure itself.
 
-The first line defines the regular expression - instead of wrapping this whole function in a `Result`, I'm just promising the compiler (and you) that `r" +"` constitutes a valid `Regex` and using a plain old `unwrap()` on the `Result` that `Regex::new()` returns.  This function would return an error if passed an invalid regular expression.  We know this won't panic, it will just match one or more spaces ignoring anything else like tabs and newlines.  Different inputs may require different regexes for optimal output.  Then we return the result of calling the `split()` method using this regex and using `collect()` to return the resulting [`Iterator`](https://doc.rust-lang.org/std/iter/trait.Iterator.html) as a `Vec<&str>`.
+The first line defines the regular expression - instead of wrapping this whole function in a `Result`, I'm just promising the compiler (and you) that `r" +"` constitutes a valid `Regex` and using a plain old `unwrap()` on the `Result` that `Regex::new()` returns.  Creating a new `Regex` would return an error if passed an invalid regular expression, in which case our `unwrap()` call would panic.  We know this won't panic, though, it will just match one or more spaces ignoring anything else like tabs and newlines.  Different inputs may require different regexes for optimal output.  Then we return the result of calling the `split()` method using this regex and then `collect()` to return the resulting [`Iterator`](https://doc.rust-lang.org/std/iter/index.html) as a `Vec<&str>`.
 
+TODO - TEST OUT WORD SPLITTING
 
+### Get Organized
+
+To build the lookup table, we want to look at three words at a time.  The first two will be used for the key, and the third will be appended to the list of possible options.  That is, we're going to want to look at the first, second, and third word, then the second, third, and fourth word, then the third, fourth, and fifth word, and so on.  The most concise way to build a nice handy iterator for this is the `izip!()` macro found in the [`itertools`]() crate: `$ cargo add itertools`.
+
+```rust
+#[macro_use]
+extern crate itertools;
+//..
+fn build_table(words: Vec<&str>) -> HashMap<(&str, &str), Vec<&str>> {
+    let mut ret = HashMap::new();
+    for (w0, w1, w2) in izip!(&words, &words[1..], &words[2..]) {
+        // add w2 to the key (w0, w1)
+        let current = ret.entry((*w0, *w1)).or_insert_with(Vec::new);
+        current.push(*w2);
+    }
+    ret
+}
+```
+
+We need to pull in the `izip!()` macro with the `#[macro_use]` tag, first.  We then use slices to build sublists with the proper offsets.  This `for` loop will end up iterating through each three word triple in the source text.
+
+Inside the loop we use the [`Entry API`](https://doc.rust-lang.org/std/collections/hash_map/struct.HashMap.html#method.entry) to look up the key from the first two words of the triple - `("bears", "are")`, for example.  If no such key is found the `or_insert_with()` call will create it for us with an empty `Vec` ready to go, so that no matter wht we can `push` the third word to it in the next line.  Once this loop completes, we've built the data structure described in the step-through above.
+
+It's possible to skip the itertools dependency if you like, but the code comes out a little clunkier - the built-in `zip` method can only zip two iterators, so you've got to call it twice and then combine everything yourself:
+
+```rust
+fn build_table_no_itertools(words: Vec<&str>) -> HashMap<(&str, &str), Vec<&str>> {
+    let mut ret = HashMap::new();
+    let all_words = &words[..];
+    let offset_1 = &words[1..];
+    let offset_2 = &words[2..];
+    for (w0, w1, w2) in all_words
+        .iter()
+        .zip(offset_1.iter())
+        .zip(offset_2.iter())
+        .map(|((a, b), c)| (a, b, c))
+    {
+        // add w2 to the key (w0, w1)
+        let current = ret.entry((*w0, *w1)).or_insert_with(Vec::new);
+        current.push(*w2);
+    }
+    ret
+}
+```
+
+This function works as a drop-in replacement with no external dependency required but you're sacrificing readiblity - this takes much longer to stare at before you understand it's just zipping together three iterators.  I'd much rather add the dependency, `izip!()` is much nicer.
+
+### Spit Them Out
+
+Now that everything's set up, we can just perform as many lookups as specified and string everything together.  We need something to start, with though, so first we'll just select a random starting point from the source text.  We need one more crate to accomplish this: `$ cargo add rand`.
+
+```rust
+use rand::{seq::SliceRandom, thread_rng, Rng};
+//..
+fn run(input: PathBuf, length: u32) -> Result<(), Box<dyn Error>> {
+    let file_str = read_file(input)?;
+    let words = split_words(&file_str);
+
+    let mut rng = thread_rng();
+    let i = rng.gen_range(0, words.len() - 3);
+
+    let mut w0 = words[i];
+    let mut w1 = words[i + 1];
+    let mut w2 = words[i + 2];
+}
+```
+
+We'll reuse these variables inside the loop.
+
+There's a gotcha in this implementation, though.  As it's written, `build_table` is taking ownership of our `words` vector.  That means that after we call it, we can't use `words` again.  Luckily, there is nothing stopping us from simply picking our starting location *before* we build the table.  We'll need to actually call the function directly below the above setup:
+
+```rust
+let lookup = build_table(words);
+```
+
+Now everything's in place for the generation loop:
+
+```rust
+    // each iteration, print current word and then a space, and update our words
+    for _ in 0..length {
+        // append to output
+        print!("{} ", w2);
+
+        // choose the next word
+        w2 = &lookup[&(w0, w1)].choose(&mut rng).unwrap_or(&"NONE");
+        w0 = w1;
+        w1 = w2;
+    }
+```
+
+We just printout whatever we've got stored in `w2`, add a space, and then use `w0` and `w1` to look up the next word.  Once we've selected in, we need to update `w0` and `w1`, advancing our cursor to the next triple.
+
+That's the whole program - fire it up with `cargo run --release`.  We provided sane default argument values, so you don't need to use the command line options we defined unless you want to.
 
 This is my favorite run so far on the poetry set:
 
